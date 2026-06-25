@@ -30,6 +30,7 @@ WEBHOOK_SECRET  = os.getenv("WEBHOOK_SECRET")
 PORT            = int(os.getenv("PORT", 8080))
 WEBHOOK_PATH    = "/webhook"
 WEBHOOK_URL     = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
+logger.info(f"WEBHOOK_HOST={WEBHOOK_HOST}, WEBHOOK_URL={WEBHOOK_URL}")
 
 bot = Bot(token=TELEGRAM_TOKEN)
 dp  = Dispatcher(storage=MemoryStorage())
