@@ -1,11 +1,8 @@
 import asyncio
-import os
-import yaml
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from database import init_db, save_draft, set_moderation_message_id
-from fetcher import Article, load_config, fetch_all
-from processor import process_all
+from database import save_draft, set_moderation_message_id, get_channel
+from fetcher import Article
 
 
 def moderation_keyboard(draft_id: int) -> InlineKeyboardMarkup:
@@ -27,8 +24,7 @@ def format_draft_message(article: Article, content: str) -> str:
 
 async def post_draft(bot: Bot, article: Article, content: str, moderation_group_id: int, delay: float):
     draft_id = await save_draft(
-        channel_name=article.channel_name,
-        channel_chat_id=article.channel_chat_id,
+        channel_id=article.channel_id,
         title=article.title,
         content=content,
         source_url=article.url,
@@ -39,68 +35,35 @@ async def post_draft(bot: Bot, article: Article, content: str, moderation_group_
     try:
         msg = await bot.send_message(
             chat_id=moderation_group_id,
-            message_thread_id=article.moderation_topic_id,
+            message_thread_id=article.topic_id,
             text=text,
             parse_mode="HTML",
             reply_markup=moderation_keyboard(draft_id),
             disable_web_page_preview=True,
         )
         await set_moderation_message_id(draft_id, msg.message_id)
-        print(f"[poster] ✓ Черновик #{draft_id} отправлен в топик {article.moderation_topic_id}")
+        print(f"[poster] ✓ Черновик #{draft_id} → топик {article.topic_id}")
     except Exception as e:
-        print(f"[poster] ✗ Ошибка отправки черновика #{draft_id}: {e}")
+        print(f"[poster] ✗ Ошибка черновика #{draft_id}: {e}")
 
     await asyncio.sleep(delay)
 
-async def run_cycle(bot: Bot):
-    """Вызывается из bot.py по расписанию — использует уже существующий bot."""
-    config              = load_config()
-    moderation_group_id = config["telegram"]["moderation_group_id"]
-    delay               = config["settings"].get("delay_between_posts", 1)
 
-    articles = await fetch_all(config)
+async def run_cycle(bot: Bot, moderation_group_id: int, user_id: int, delay: float = 1):
+    from fetcher import fetch_all_for_user
+    from processor import process_all
+
+    articles = await fetch_all_for_user(user_id)
     if not articles:
-        print("[poster] Нет новых статей")
+        print(f"[poster] user {user_id}: нет новых статей")
         return
 
     processed = await process_all(articles)
     if not processed:
-        print("[poster] AI не вернул результатов")
+        print(f"[poster] user {user_id}: AI не вернул результатов")
         return
 
     for article, content in processed:
         await post_draft(bot, article, content, moderation_group_id, delay)
 
-    print(f"[poster] Готово. Черновиков отправлено: {len(processed)}")
-
-async def main():
-    await init_db()
-    config = load_config()
-
-    bot_token          = os.getenv("TELEGRAM_BOT_TOKEN")
-    moderation_group_id = config["telegram"]["moderation_group_id"]
-    delay              = config["settings"].get("delay_between_posts", 1)
-
-    bot = Bot(token=bot_token)
-
-    articles = await fetch_all(config)
-    if not articles:
-        print("[poster] Нет новых статей для публикации")
-        await bot.session.close()
-        return
-
-    processed = await process_all(articles)
-    if not processed:
-        print("[poster] GPT не вернул ни одного результата")
-        await bot.session.close()
-        return
-
-    for article, content in processed:
-        await post_draft(bot, article, content, moderation_group_id, delay)
-
-    await bot.session.close()
-    print(f"[poster] Готово. Отправлено черновиков: {len(processed)}")
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    print(f"[poster] user {user_id}: отправлено черновиков: {len(processed)}")

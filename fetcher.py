@@ -1,36 +1,24 @@
 import asyncio
 import feedparser
-import os
-import yaml
 from dataclasses import dataclass
 from typing import List
-from database import init_db, is_url_seen, mark_url_seen
+from database import (
+    get_user_channels, get_channel_sources,
+    is_url_seen, mark_url_seen,
+)
 
 
 @dataclass
 class Article:
-    channel_name: str
+    channel_id:   int
     channel_chat_id: str
-    moderation_topic_id: int
+    topic_id:     int
     prompt_style: str
-    title: str
-    summary: str
-    url: str
-    source: str
-
-
-def load_config() -> dict:
-    config_path = os.path.join(os.path.dirname(__file__), "config.yaml")
-    with open(config_path, "r", encoding="utf-8") as f:
-        raw = f.read()
-    for key, val in os.environ.items():
-        raw = raw.replace(f"${{{key}}}", val)
-    return yaml.safe_load(raw)
-
-
-def keyword_match(text: str, keywords: List[str]) -> bool:
-    text_lower = text.lower()
-    return any(kw.lower() in text_lower for kw in keywords)
+    max_posts:    int
+    title:        str
+    summary:      str
+    url:          str
+    source:       str
 
 
 def parse_feed(url: str) -> List[dict]:
@@ -50,32 +38,41 @@ def parse_feed(url: str) -> List[dict]:
         return []
 
 
+def keyword_match(text: str, keywords: List[str]) -> bool:
+    if not keywords:
+        return True
+    text_lower = text.lower()
+    return any(kw.lower() in text_lower for kw in keywords)
+
+
 async def fetch_for_channel(channel: dict) -> List[Article]:
-    name         = channel["name"]
+    channel_id   = channel["id"]
     chat_id      = channel["chat_id"]
-    topic_id     = channel["moderation_topic_id"]
+    topic_id     = channel["topic_id"]
     prompt_style = channel.get("prompt_style", "деловой")
-    keywords     = channel.get("keywords", [])
-    sources      = channel.get("sources", [])
-    max_posts    = channel.get("max_posts_per_run", 5)
+    max_posts    = channel.get("max_posts", 5)
+
+    sources = await get_channel_sources(channel_id)
+    if not sources:
+        print(f"[fetcher] Канал {chat_id}: нет источников")
+        return []
 
     candidates: List[Article] = []
 
-    for source_url in sources:
-        raw_articles = await asyncio.to_thread(parse_feed, source_url)
+    for source in sources:
+        url          = source["url"]
+        raw_articles = await asyncio.to_thread(parse_feed, url)
         for a in raw_articles:
             if not a["url"]:
                 continue
-            if await is_url_seen(a["url"], name):
-                continue
-            text = f"{a['title']} {a['summary']}"
-            if keywords and not keyword_match(text, keywords):
+            if await is_url_seen(a["url"], channel_id):
                 continue
             candidates.append(Article(
-                channel_name=name,
+                channel_id=channel_id,
                 channel_chat_id=chat_id,
-                moderation_topic_id=topic_id,
+                topic_id=topic_id,
                 prompt_style=prompt_style,
+                max_posts=max_posts,
                 title=a["title"],
                 summary=a["summary"],
                 url=a["url"],
@@ -84,26 +81,16 @@ async def fetch_for_channel(channel: dict) -> List[Article]:
 
     result = candidates[:max_posts]
     for article in result:
-        await mark_url_seen(article.url, name)
+        await mark_url_seen(article.url, channel_id)
 
-    print(f"[fetcher] {name}: найдено {len(result)} новых статей")
+    print(f"[fetcher] {chat_id}: найдено {len(result)} новых статей")
     return result
 
 
-async def fetch_all(config: dict) -> List[Article]:
-    tasks = [fetch_for_channel(ch) for ch in config["channels"]]
+async def fetch_all_for_user(user_id: int) -> List[Article]:
+    channels = await get_user_channels(user_id)
+    if not channels:
+        return []
+    tasks   = [fetch_for_channel(ch) for ch in channels]
     results = await asyncio.gather(*tasks)
-    articles = [a for batch in results for a in batch]
-    return articles
-
-
-async def main():
-    await init_db()
-    config = load_config()
-    articles = await fetch_all(config)
-    print(f"[fetcher] Итого статей для обработки: {len(articles)}")
-    return articles
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    return [a for batch in results for a in batch]
