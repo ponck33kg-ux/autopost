@@ -1,0 +1,6 @@
+aiogram==3.13.0
+aiohttp
+asyncpg
+openai
+feedparser
+pyyaml

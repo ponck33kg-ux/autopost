@@ -1,0 +1,31 @@
+telegram:
+  bot_token: "${TELEGRAM_BOT_TOKEN}"
+  moderation_group_id: -1003944760575  # АВТОПОСТИНГ_ГРУППА
+
+openai:
+  model: "gpt-4o"
+
+settings:
+  delay_between_posts: 1  # секунд между отправками в Telegram
+
+channels:
+  - name: "Финансы"
+    chat_id: "@testautopost32"
+    moderation_topic_id: 6
+    prompt_style: "деловой"               # деловой | кликбейт
+    max_posts_per_run: 5
+    keywords:
+      - "рынок"
+      - "акции"
+      - "ставка"
+      - "ФРС"
+      - "инфляция"
+      - "нефть"
+      - "рубль"
+      - "санкции"
+    sources:
+      - "https://feeds.reuters.com/reuters/businessNews"
+      - "https://rbc.ru/rss/news"
+      - "https://www.cnbc.com/id/10001147/device/rss/rss.html"
+      # Telegram-канал через RSSHub (публичные каналы):
+      # - "https://rsshub.app/telegram/channel/markettwits"

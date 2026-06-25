@@ -1,0 +1,29 @@
+name: Autopost
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"   # каждые 6 часов
+  workflow_dispatch:          # ручной запуск из вкладки Actions
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run poster
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          OPENAI_API_KEY:     ${{ secrets.OPENAI_API_KEY }}
+          DATABASE_URL:       ${{ secrets.DATABASE_URL }}
+        run: python poster.py
