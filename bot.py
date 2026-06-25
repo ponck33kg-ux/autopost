@@ -13,6 +13,7 @@ from aiogram.types import (
     Message,
 )
 from aiohttp import web
+from poster import run_cycle
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from database import (
     init_db,
@@ -164,7 +165,16 @@ async def handle_reject(callback: CallbackQuery):
 async def on_startup(app: web.Application):
     await init_db()
     asyncio.create_task(set_webhook_delayed())
+    asyncio.create_task(scheduled_posting_loop())
 
+async def scheduled_posting_loop():
+    await asyncio.sleep(60)  # пауза после старта
+    while True:
+        try:
+            await run_cycle(bot)
+        except Exception as e:
+            logger.error(f"Ошибка цикла постинга: {e}")
+        await asyncio.sleep(6 * 60 * 60)  # каждые 6 часов
 
 async def set_webhook_delayed():
     await asyncio.sleep(10)
