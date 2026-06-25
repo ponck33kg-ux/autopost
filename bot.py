@@ -39,6 +39,22 @@ class EditState(StatesGroup):
     waiting_for_text = State()
 
 
+# ── /start ─────────────────────────────────────────────────────────────────────
+
+@dp.message(Command("start"))
+async def cmd_start(message: Message):
+    await message.answer(
+        "👋 Привет! Я <b>Autopost Bot</b> — бот для автоматического сбора и публикации новостей в Telegram-каналы.\n\n"
+        "📋 Как это работает:\n"
+        "1. По расписанию собираю новости из RSS-источников\n"
+        "2. Обрабатываю их через AI\n"
+        "3. Отправляю черновики в группу модерации\n"
+        "4. После твоего одобрения — публикую в канал\n\n"
+        "Жди черновики в группе модерации 🚀",
+        parse_mode="HTML",
+    )
+
+
 # ── Кнопки ────────────────────────────────────────────────────────────────────
 
 def confirm_keyboard(draft_id: int) -> InlineKeyboardMarkup:
