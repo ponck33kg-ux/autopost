@@ -52,6 +52,26 @@ async def post_draft(bot: Bot, article: Article, content: str, moderation_group_
 
     await asyncio.sleep(delay)
 
+async def run_cycle(bot: Bot):
+    """Вызывается из bot.py по расписанию — использует уже существующий bot."""
+    config              = load_config()
+    moderation_group_id = config["telegram"]["moderation_group_id"]
+    delay               = config["settings"].get("delay_between_posts", 1)
+
+    articles = await fetch_all(config)
+    if not articles:
+        print("[poster] Нет новых статей")
+        return
+
+    processed = await process_all(articles)
+    if not processed:
+        print("[poster] AI не вернул результатов")
+        return
+
+    for article, content in processed:
+        await post_draft(bot, article, content, moderation_group_id, delay)
+
+    print(f"[poster] Готово. Черновиков отправлено: {len(processed)}")
 
 async def main():
     await init_db()
