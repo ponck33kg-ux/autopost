@@ -31,7 +31,7 @@ from database import (
     MAX_CHANNELS_PER_USER,
 )
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 TELEGRAM_TOKEN      = os.getenv("TELEGRAM_BOT_TOKEN")
