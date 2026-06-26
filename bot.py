@@ -151,13 +151,12 @@ def confirm_keyboard(draft_id: int) -> InlineKeyboardMarkup:
 async def cmd_start(message: Message):
     await get_or_create_user(message.from_user.id)
     await message.answer(
-        "👋 Привет! Я <b>Autopost Bot</b> — собираю новости из RSS и публикую в твои каналы после одобрения.\n\n"
+        "👋 Привет! Я <b>Autopost Bot</b> — собираю новости из RSS и публикую в ваши каналы после одобрения.\n\n"
         "📋 Как начать:\n"
-        "1. Добавь модерационную группу с топиками\n"
-        "2. Добавь свой канал — /channels\n"
-        "3. Добавь RSS источники к каналу\n"
-        "4. Жди черновики в группе модерации\n\n"
-        "Управление каналами: /channels",
+        "1. Нажмите /channels и добавьте канал\n"
+        "2. В процессе добавления вы настроите группу модерации, источники и расписание\n"
+        "3. Готово — черновики будут приходить вам на одобрение\n\n"
+        "/channels — управление каналами",
         parse_mode="HTML",
     )
 
