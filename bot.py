@@ -31,7 +31,7 @@ from database import (
     MAX_CHANNELS_PER_USER,
 )
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
 TELEGRAM_TOKEN      = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -258,7 +258,7 @@ async def got_chat_id(message: Message, state: FSMContext):
 )
 
 
-dp.message(AddChannelState.waiting_topic_id)
+@dp.message(AddChannelState.waiting_topic_id, F.text)
 async def got_topic_id(message: Message, state: FSMContext):
     text = message.text.strip()
     topic_id = None
