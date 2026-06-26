@@ -266,8 +266,14 @@ async def got_topic_id(message: Message, state: FSMContext):
     if text.startswith("https://t.me/"):
         parts = text.rstrip("/").split("/")
         try:
-            topic_id = int(parts[-1])
-        except ValueError:
+            # ссылка вида https://t.me/c/GROUPID/TOPICID/MESSAGEID
+            # topic_id — третий элемент после t.me/c/
+            if "c" in parts:
+                c_index = parts.index("c")
+                topic_id = int(parts[c_index + 2])
+            else:
+                topic_id = int(parts[-1])
+        except (ValueError, IndexError):
             pass
     else:
         try:
