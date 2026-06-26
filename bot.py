@@ -50,9 +50,11 @@ dp  = Dispatcher(storage=MemoryStorage())
 
 class AddChannelState(StatesGroup):
     waiting_chat_id      = State()
-    waiting_name         = State()
     waiting_topic_id     = State()
     waiting_prompt_style = State()
+    waiting_interval     = State()
+    waiting_night_mode   = State()
+    waiting_timezone     = State()
 
 class AddSourceState(StatesGroup):
     waiting_channel = State()
@@ -105,6 +107,33 @@ def prompt_style_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📰 Деловой",  callback_data="style:деловой")],
         [InlineKeyboardButton(text="🔥 Кликбейт", callback_data="style:кликбейт")],
+    ])
+    
+def interval_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⚡ Каждые 3 часа",  callback_data="interval:3")],
+        [InlineKeyboardButton(text="🕐 Каждые 6 часов", callback_data="interval:6")],
+        [InlineKeyboardButton(text="🕛 Каждые 12 часов", callback_data="interval:12")],
+        [InlineKeyboardButton(text="📅 Раз в сутки",    callback_data="interval:24")],
+    ])
+
+
+def night_mode_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🌙 Включить (нет постов с 23:00 до 8:00)", callback_data="night:on")],
+        [InlineKeyboardButton(text="☀️ Выключить", callback_data="night:off")],
+    ])
+
+
+def timezone_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🇷🇺 Москва (UTC+3)",       callback_data="tz:Europe/Moscow")],
+        [InlineKeyboardButton(text="🇷🇺 Екатеринбург (UTC+5)", callback_data="tz:Asia/Yekaterinburg")],
+        [InlineKeyboardButton(text="🇷🇺 Новосибирск (UTC+7)",  callback_data="tz:Asia/Novosibirsk")],
+        [InlineKeyboardButton(text="🇷🇺 Владивосток (UTC+10)", callback_data="tz:Asia/Vladivostok")],
+        [InlineKeyboardButton(text="🇺🇦 Киев (UTC+2)",         callback_data="tz:Europe/Kiev")],
+        [InlineKeyboardButton(text="🇰🇿 Алматы (UTC+6)",       callback_data="tz:Asia/Almaty")],
+        [InlineKeyboardButton(text="🌍 Другой — введу сам",    callback_data="tz:manual")],
     ])
 
 
@@ -212,53 +241,144 @@ async def got_chat_id(message: Message, state: FSMContext):
     if not chat_id.startswith("@"):
         await message.answer("Username должен начинаться с @. Попробуй снова:")
         return
-    await state.update_data(chat_id=chat_id)
-    await state.set_state(AddChannelState.waiting_name)
-    await message.answer("Придумай название для этого канала (для себя):")
-
-
-@dp.message(AddChannelState.waiting_name)
-async def got_name(message: Message, state: FSMContext):
-    await state.update_data(name=message.text.strip())
+    name = chat_id.lstrip("@")
+    await state.update_data(chat_id=chat_id, name=name)
     await state.set_state(AddChannelState.waiting_topic_id)
     await message.answer(
-        "Пришли topic_id топика в модерационной группе для этого канала.\n\n"
-        "Как узнать: напиши сообщение в нужный топик → скопируй ссылку → последняя цифра и есть topic_id."
-    )
+         "Все новости будут приходить в специальную группу — там вы сможете просматривать, "
+    "редактировать и публиковать их одной кнопкой.\n\n"
+    "Если группы ещё нет — создайте её:\n"
+    "1. Создайте новую группу в Telegram\n"
+    "2. Зайдите в настройки группы → включите <b>Темы</b>\n"
+    "3. Добавьте меня (@autopost32_bot) как администратора\n"
+    "4. Создайте тему (топик) которая будет связана с каналом <code>{chat_id}</code>\n\n"
+    "Когда группа готова:\n"
+    "Зайдите в нужный топик → напишите любое сообщение → нажмите на него → "
+    "<b>Копировать ссылку</b> → пришлите её мне.",
+    parse_mode="HTML",
+)
 
 
-@dp.message(AddChannelState.waiting_topic_id)
+dp.message(AddChannelState.waiting_topic_id)
 async def got_topic_id(message: Message, state: FSMContext):
-    try:
-        topic_id = int(message.text.strip())
-    except ValueError:
-        await message.answer("Нужно число. Попробуй снова:")
+    text = message.text.strip()
+    topic_id = None
+
+    if text.startswith("https://t.me/"):
+        parts = text.rstrip("/").split("/")
+        try:
+            topic_id = int(parts[-1])
+        except ValueError:
+            pass
+    else:
+        try:
+            topic_id = int(text)
+        except ValueError:
+            pass
+
+    if not topic_id:
+        await message.answer(
+            "Не удалось распознать ссылку. Попробуйте ещё раз — "
+            "пришлите ссылку на сообщение в топике."
+        )
         return
+
     await state.update_data(topic_id=topic_id)
     await state.set_state(AddChannelState.waiting_prompt_style)
-    await message.answer("Выбери стиль публикаций:", reply_markup=prompt_style_keyboard())
+    await message.answer(
+        "Выберите стиль публикаций:",
+        reply_markup=prompt_style_keyboard()
+    )
 
 
 @dp.callback_query(F.data.startswith("style:"))
 async def got_prompt_style(callback: CallbackQuery, state: FSMContext):
     style = callback.data.split(":")[1]
-    data  = await state.get_data()
-    await state.clear()
-
-    channel_id = await add_channel(
-        user_id=callback.from_user.id,
-        chat_id=data["chat_id"],
-        name=data["name"],
-        topic_id=data["topic_id"],
-        prompt_style=style,
-    )
+    await state.update_data(prompt_style=style)
+    await state.set_state(AddChannelState.waiting_interval)
     await callback.message.edit_text(
-        f"✅ Канал <b>{data['name']}</b> добавлен!\n\n"
-        f"Теперь добавь RSS источники через /channels → выбери канал → Добавить источник.",
-        parse_mode="HTML",
+        "Как часто публиковать новости?",
+        reply_markup=interval_keyboard()
     )
     await callback.answer()
 
+@dp.callback_query(F.data.startswith("interval:"))
+async def got_interval(callback: CallbackQuery, state: FSMContext):
+    interval = int(callback.data.split(":")[1])
+    await state.update_data(interval=interval)
+    await state.set_state(AddChannelState.waiting_night_mode)
+    await callback.message.edit_text(
+        "🌙 Ночной режим — с 23:00 до 8:00 черновики не отправляются.\n\n"
+        "Включить?",
+        reply_markup=night_mode_keyboard()
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("night:"))
+
+async def got_night_mode(callback: CallbackQuery, state: FSMContext):
+    night_mode = callback.data.split(":")[1] == "on"
+    await state.update_data(night_mode=night_mode)
+    await state.set_state(AddChannelState.waiting_timezone)
+    await callback.message.edit_text(
+        "Выберите ваш часовой пояс:",
+        reply_markup=timezone_keyboard()
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("tz:"))
+async def got_timezone(callback: CallbackQuery, state: FSMContext):
+    tz = callback.data.split(":")[1]
+    if tz == "manual":
+        await callback.message.edit_text(
+            "Введите часовой пояс вручную.\n\n"
+            "Примеры: <code>Europe/Moscow</code>, <code>Asia/Almaty</code>, <code>Europe/Kiev</code>",
+            parse_mode="HTML",
+        )
+        await callback.answer()
+        return
+
+    await finish_add_channel(callback, state, tz)
+    await callback.answer()
+
+
+@dp.message(AddChannelState.waiting_timezone)
+async def got_timezone_manual(message: Message, state: FSMContext):
+    await finish_add_channel(message, state, message.text.strip())
+
+
+async def finish_add_channel(event, state: FSMContext, timezone: str):
+    data    = await state.get_data()
+    await state.clear()
+
+    user_id = event.from_user.id
+
+    channel_id = await add_channel(
+        user_id=user_id,
+        chat_id=data["chat_id"],
+        name=data["name"],
+        topic_id=data["topic_id"],
+        prompt_style=data["prompt_style"],
+        interval=data["interval"],
+        night_mode=data["night_mode"],
+        timezone=timezone,
+    )
+
+    text = (
+        f"✅ Канал <b>{data['chat_id']}</b> добавлен!\n\n"
+        f"⏱ Частота: каждые {data['interval']} ч.\n"
+        f"🌙 Ночной режим: {'включён' if data['night_mode'] else 'выключен'}\n"
+        f"🕐 Часовой пояс: {timezone}\n\n"
+        f"Теперь добавьте RSS источники:\n"
+        f"/channels → выберите канал → Добавить источник"
+    )
+
+    if isinstance(event, CallbackQuery):
+        await event.message.edit_text(text, parse_mode="HTML")
+    else:
+        await event.answer(text, parse_mode="HTML")
 
 # ── Удалить канал ──────────────────────────────────────────────────────────────
 

@@ -35,9 +35,12 @@ async def init_db():
                 topic_id     INTEGER NOT NULL,
                 prompt_style TEXT DEFAULT 'деловой',
                 max_posts    INTEGER DEFAULT 5,
+                interval     INTEGER DEFAULT 6,
+                night_mode   BOOLEAN DEFAULT FALSE,
+                timezone     TEXT DEFAULT 'Europe/Moscow',
                 created_at   TIMESTAMPTZ DEFAULT NOW()
             );
-
+            
             CREATE TABLE IF NOT EXISTS sources (
                 id         SERIAL PRIMARY KEY,
                 channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
@@ -97,15 +100,19 @@ async def count_user_channels(user_id: int) -> int:
         )
 
 
-async def add_channel(user_id: int, chat_id: str, name: str, topic_id: int, prompt_style: str) -> int:
+async def add_channel(
+    user_id: int, chat_id: str, name: str, topic_id: int,
+    prompt_style: str, interval: int = 6, night_mode: bool = False,
+    timezone: str = "Europe/Moscow",
+) -> int:
     pool = await get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
-            INSERT INTO channels (user_id, chat_id, name, topic_id, prompt_style)
-            VALUES ($1, $2, $3, $4, $5) RETURNING id
+            INSERT INTO channels (user_id, chat_id, name, topic_id, prompt_style, interval, night_mode, timezone)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id
             """,
-            user_id, chat_id, name, topic_id, prompt_style,
+            user_id, chat_id, name, topic_id, prompt_style, interval, night_mode, timezone,
         )
         return row["id"]
 
