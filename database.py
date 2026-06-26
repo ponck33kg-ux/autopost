@@ -67,6 +67,11 @@ async def init_db():
                 created_at            TIMESTAMPTZ DEFAULT NOW()
             );
         """)
+        await conn.execute("""
+            ALTER TABLE channels ADD COLUMN IF NOT EXISTS interval INTEGER DEFAULT 6;
+            ALTER TABLE channels ADD COLUMN IF NOT EXISTS night_mode BOOLEAN DEFAULT FALSE;
+            ALTER TABLE channels ADD COLUMN IF NOT EXISTS timezone TEXT DEFAULT 'Europe/Moscow';
+        """)
 
 
 # ── users ──────────────────────────────────────────────────────────────────────
