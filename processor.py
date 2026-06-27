@@ -49,7 +49,7 @@ async def process_article(article: Article) -> str:
     user_message  = build_user_message(article)
     content = await asyncio.to_thread(call_gpt, system_prompt, user_message)
     if content:
-        print(f"[processor] ✓ {article.channel_name}: {article.title[:50]}...")
+        print(f"[processor] ✓ {article.channel_chat_id}: {article.title[:50]}...")
     else:
         print(f"[processor] ✗ GPT вернул пустой ответ: {article.title[:50]}...")
     return content
