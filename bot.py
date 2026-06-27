@@ -477,7 +477,11 @@ async def got_source_url(message: Message, state: FSMContext):
 
 @dp.callback_query(F.data == "source:add_more")
 async def source_add_more(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
+    data       = await state.get_data()
+    channel_id = data.get("channel_id")
+    if not channel_id:
+        await callback.answer("Сессия истекла. Зайдите в /channels.", show_alert=True)
+        return
     await state.set_state(AddSourceState.waiting_url)
     await callback.message.answer("Пришлите следующую RSS ссылку:")
     await callback.answer()
@@ -485,8 +489,12 @@ async def source_add_more(callback: CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data == "source:list")
 async def source_list(callback: CallbackQuery, state: FSMContext):
-    data    = await state.get_data()
-    sources = await get_channel_sources(data["channel_id"])
+    data       = await state.get_data()
+    channel_id = data.get("channel_id")
+    if not channel_id:
+        await callback.answer("Сессия истекла. Зайдите в /channels.", show_alert=True)
+        return
+    sources = await get_channel_sources(channel_id)
     text    = "📋 Добавленные источники:\n\n" + "\n".join(
         f"{i+1}. <code>{s['url']}</code>" for i, s in enumerate(sources)
     )
