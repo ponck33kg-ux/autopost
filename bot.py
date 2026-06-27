@@ -405,7 +405,7 @@ async def got_timezone(callback: CallbackQuery, state: FSMContext):
         return
 
     # Режим редактирования
-    if current_state == EditSettingsState.waiting_timezone.state:
+    if not data.get("chat_id"):
         channel_id = data["channel_id"]
         pool = await get_pool()
         async with pool.acquire() as conn:
