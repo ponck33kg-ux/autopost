@@ -16,6 +16,7 @@ from aiohttp import web
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from database import (
     init_db,
+    get_pool,
     get_or_create_user,
     get_user_channels,
     count_user_channels,
@@ -66,6 +67,9 @@ class DeleteSourceState(StatesGroup):
 
 class EditState(StatesGroup):
     waiting_for_text = State()
+
+class PhotoState(StatesGroup):
+    waiting_for_photo = State()
 
 
 # ── Клавиатуры ────────────────────────────────────────────────────────────────
@@ -143,14 +147,25 @@ def timezone_keyboard() -> InlineKeyboardMarkup:
     ])
 
 
+def moderation_keyboard(draft_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Опубликовать", callback_data=f"draft:approve:{draft_id}"),
+            InlineKeyboardButton(text="❌ Отклонить",    callback_data=f"draft:reject:{draft_id}"),
+        ],
+        [
+            InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"draft:edit:{draft_id}"),
+            InlineKeyboardButton(text="🖼 Иллюстрация",   callback_data=f"draft:photo:{draft_id}"),
+        ],
+    ])
+
 def confirm_keyboard(draft_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="✅ Опубликовать",  callback_data=f"draft:approve:{draft_id}"),
         InlineKeyboardButton(text="✏️ Ещё раз",       callback_data=f"draft:edit:{draft_id}"),
         InlineKeyboardButton(text="❌ Отклонить",     callback_data=f"draft:reject:{draft_id}"),
     ]])
-
-
+    
 # ── /start ─────────────────────────────────────────────────────────────────────
 
 @dp.message(Command("start"))
@@ -543,12 +558,20 @@ async def handle_approve(callback: CallbackQuery):
         await callback.answer("Канал не найден.", show_alert=True)
         return
     try:
-        await bot.send_message(
-            chat_id=channel["chat_id"],
-            text=draft["content"],
-            parse_mode="HTML",
-            disable_web_page_preview=False,
-        )
+        if draft.get("photo_file_id"):
+            await bot.send_photo(
+                chat_id=channel["chat_id"],
+                photo=draft["photo_file_id"],
+                caption=draft["content"],
+                parse_mode="HTML",
+            )
+        else:
+            await bot.send_message(
+                chat_id=channel["chat_id"],
+                text=draft["content"],
+                parse_mode="HTML",
+                disable_web_page_preview=False,
+            )
         await update_draft_status(draft_id, "published")
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.reply(f"✅ Опубликовано в {channel['chat_id']}")
@@ -605,7 +628,46 @@ async def handle_reject(callback: CallbackQuery):
     await callback.message.reply(f"❌ Черновик #{draft_id} отклонён")
     await callback.answer()
 
+@dp.callback_query(F.data.startswith("draft:photo:"))
+async def handle_photo(callback: CallbackQuery, state: FSMContext):
+    draft_id = int(callback.data.split(":")[2])
+    draft    = await get_draft_by_id(draft_id)
+    if not draft:
+        await callback.answer("Черновик не найден.", show_alert=True)
+        return
+    await state.set_state(PhotoState.waiting_for_photo)
+    await state.update_data(draft_id=draft_id)
+    await callback.message.reply(
+        "🖼 Пришлите фото для иллюстрации поста.\n\n"
+        "Оно будет опубликовано вместе с текстом."
+    )
+    await callback.answer()
 
+# ── Модерация: Фото ───────────────────────────────────────────────────────
+
+@dp.message(PhotoState.waiting_for_photo, F.photo)
+async def handle_photo_upload(message: Message, state: FSMContext):
+    data     = await state.get_data()
+    draft_id = data["draft_id"]
+    file_id  = message.photo[-1].file_id
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE drafts SET photo_file_id = $1 WHERE id = $2",
+            file_id, draft_id,
+        )
+    await state.clear()
+    await message.reply(
+        "✅ Иллюстрация сохранена. При публикации она будет прикреплена к посту.",
+        reply_markup=confirm_keyboard(draft_id),
+    )
+
+
+@dp.message(PhotoState.waiting_for_photo)
+async def handle_photo_wrong(message: Message):
+    await message.reply("Пожалуйста, пришлите фото (не файл, не ссылку).")
+    
 # ── Расписание ─────────────────────────────────────────────────────────────────
 
 async def scheduled_posting_loop():
