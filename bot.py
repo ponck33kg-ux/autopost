@@ -71,6 +71,10 @@ class EditState(StatesGroup):
 class PhotoState(StatesGroup):
     waiting_for_photo = State()
 
+class EditSettingsState(StatesGroup):
+    waiting_interval = State()
+    waiting_timezone = State()
+
 
 # ── Клавиатуры ────────────────────────────────────────────────────────────────
 
@@ -88,10 +92,11 @@ def channels_keyboard(channels: list) -> InlineKeyboardMarkup:
 
 def channel_keyboard(channel_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📋 Источники",      callback_data=f"sources:{channel_id}")],
+        [InlineKeyboardButton(text="📋 Источники",        callback_data=f"sources:{channel_id}")],
         [InlineKeyboardButton(text="➕ Добавить источник", callback_data=f"addsource:{channel_id}")],
-        [InlineKeyboardButton(text="🗑 Удалить канал",  callback_data=f"deletechannel:{channel_id}")],
-        [InlineKeyboardButton(text="◀️ Назад",          callback_data="back_channels")],
+        [InlineKeyboardButton(text="⚙️ Настройки",        callback_data=f"settings:{channel_id}")],
+        [InlineKeyboardButton(text="🗑 Удалить канал",    callback_data=f"deletechannel:{channel_id}")],
+        [InlineKeyboardButton(text="◀️ Назад",            callback_data="back_channels")],
     ])
 
 
@@ -133,6 +138,15 @@ def source_actions_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="➕ Добавить ещё",        callback_data="source:add_more")],
         [InlineKeyboardButton(text="📋 Список источников",   callback_data="source:list")],
         [InlineKeyboardButton(text="✅ Готово",              callback_data="source:done")],
+    ])
+    
+def settings_keyboard(channel_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⏱ Частота",        callback_data=f"edit:interval:{channel_id}")],
+        [InlineKeyboardButton(text="🌙 Ночной режим",   callback_data=f"edit:night:{channel_id}")],
+        [InlineKeyboardButton(text="🕐 Часовой пояс",  callback_data=f"edit:timezone:{channel_id}")],
+        [InlineKeyboardButton(text="📝 Стиль",          callback_data=f"edit:style:{channel_id}")],
+        [InlineKeyboardButton(text="◀️ Назад",          callback_data=f"channel:{channel_id}")],
     ])
 
 def timezone_keyboard() -> InlineKeyboardMarkup:
@@ -319,7 +333,28 @@ async def got_topic_id(message: Message, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("style:"))
 async def got_prompt_style(callback: CallbackQuery, state: FSMContext):
-    style = callback.data.split(":")[1]
+    style        = callback.data.split(":")[1]
+    current_state = await state.get_state()
+    data         = await state.get_data()
+
+    # Режим редактирования настроек существующего канала
+    if data.get("channel_id") and current_state != AddChannelState.waiting_prompt_style:
+        channel_id = data["channel_id"]
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE channels SET prompt_style = $1 WHERE id = $2",
+                style, channel_id,
+            )
+        await state.clear()
+        await callback.message.edit_text(
+            f"📝 Стиль обновлён: {style}.",
+            reply_markup=settings_keyboard(channel_id)
+        )
+        await callback.answer()
+        return
+
+    # Режим создания нового канала
     await state.update_data(prompt_style=style)
     await state.set_state(AddChannelState.waiting_interval)
     await callback.message.edit_text(
@@ -405,6 +440,71 @@ async def finish_add_channel(event, state: FSMContext, timezone: str):
         await event.message.edit_text(text, parse_mode="HTML")
     else:
         await event.answer(text, parse_mode="HTML")
+        
+        # ── Сохранение настроек ────────────────────────────────────────────────────────
+
+@dp.callback_query(EditSettingsState.waiting_interval, F.data.startswith("interval:"))
+async def save_interval(callback: CallbackQuery, state: FSMContext):
+    interval   = int(callback.data.split(":")[1])
+    data       = await state.get_data()
+    channel_id = data["channel_id"]
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE channels SET interval = $1 WHERE id = $2",
+            interval, channel_id,
+        )
+    await state.clear()
+    await callback.message.edit_text(
+        f"⏱ Частота обновлена: каждые {interval} ч.",
+        reply_markup=settings_keyboard(channel_id)
+    )
+    await callback.answer()
+
+
+@dp.callback_query(EditSettingsState.waiting_timezone, F.data.startswith("tz:"))
+async def save_timezone(callback: CallbackQuery, state: FSMContext):
+    tz         = callback.data.split(":")[1]
+    data       = await state.get_data()
+    channel_id = data["channel_id"]
+    if tz == "manual":
+        await callback.message.answer(
+            "Введите часовой пояс вручную.\n\n"
+            "Например: <code>Europe/Moscow</code>",
+            parse_mode="HTML",
+        )
+        await callback.answer()
+        return
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE channels SET timezone = $1 WHERE id = $2",
+            tz, channel_id,
+        )
+    await state.clear()
+    await callback.message.edit_text(
+        f"🕐 Часовой пояс обновлён: {tz}.",
+        reply_markup=settings_keyboard(channel_id)
+    )
+    await callback.answer()
+
+
+@dp.message(EditSettingsState.waiting_timezone, F.text)
+async def save_timezone_manual(message: Message, state: FSMContext):
+    data       = await state.get_data()
+    channel_id = data["channel_id"]
+    tz         = message.text.strip()
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE channels SET timezone = $1 WHERE id = $2",
+            tz, channel_id,
+        )
+    await state.clear()
+    await message.answer(
+        f"🕐 Часовой пояс обновлён: {tz}.",
+        reply_markup=settings_keyboard(channel_id)
+    )
 
 # ── Удалить канал ──────────────────────────────────────────────────────────────
 
@@ -419,6 +519,78 @@ async def cb_delete_channel(callback: CallbackQuery):
     await callback.message.edit_text(f"🗑 Канал <b>{channel['name']}</b> удалён.", parse_mode="HTML")
     await callback.answer()
 
+# ── Настройки канала ───────────────────────────────────────────────────────────
+
+@dp.callback_query(F.data.startswith("settings:"))
+async def show_settings(callback: CallbackQuery):
+    channel_id = int(callback.data.split(":")[1])
+    channel    = await get_channel(channel_id)
+    if not channel:
+        await callback.answer("Канал не найден.", show_alert=True)
+        return
+    await callback.message.edit_text(
+        f"⚙️ <b>Настройки канала {channel['chat_id']}</b>\n\n"
+        f"⏱ Частота: каждые {channel['interval']} ч.\n"
+        f"🌙 Ночной режим: {'включён' if channel['night_mode'] else 'выключен'}\n"
+        f"🕐 Часовой пояс: {channel['timezone']}\n"
+        f"📝 Стиль: {channel['prompt_style']}",
+        parse_mode="HTML",
+        reply_markup=settings_keyboard(channel_id)
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("edit:interval:"))
+async def edit_interval(callback: CallbackQuery, state: FSMContext):
+    channel_id = int(callback.data.split(":")[2])
+    await state.set_state(EditSettingsState.waiting_interval)
+    await state.update_data(channel_id=channel_id)
+    await callback.message.edit_text(
+        "Выберите частоту публикаций:",
+        reply_markup=interval_keyboard()
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("edit:night:"))
+async def edit_night(callback: CallbackQuery):
+    channel_id = int(callback.data.split(":")[2])
+    channel    = await get_channel(channel_id)
+    new_value  = not channel["night_mode"]
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE channels SET night_mode = $1 WHERE id = $2",
+            new_value, channel_id,
+        )
+    await callback.message.edit_text(
+        f"🌙 Ночной режим {'включён' if new_value else 'выключен'}.",
+        reply_markup=settings_keyboard(channel_id)
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("edit:timezone:"))
+async def edit_timezone(callback: CallbackQuery, state: FSMContext):
+    channel_id = int(callback.data.split(":")[2])
+    await state.set_state(EditSettingsState.waiting_timezone)
+    await state.update_data(channel_id=channel_id)
+    await callback.message.edit_text(
+        "Выберите часовой пояс:",
+        reply_markup=timezone_keyboard()
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("edit:style:"))
+async def edit_style(callback: CallbackQuery, state: FSMContext):
+    channel_id = int(callback.data.split(":")[2])
+    await state.update_data(channel_id=channel_id)
+    await callback.message.edit_text(
+        "Выберите стиль публикаций:",
+        reply_markup=prompt_style_keyboard()
+    )
+    await callback.answer()
 
 # ── Источники ──────────────────────────────────────────────────────────────────
 
