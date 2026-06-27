@@ -338,7 +338,7 @@ async def got_prompt_style(callback: CallbackQuery, state: FSMContext):
     data         = await state.get_data()
 
     # Режим редактирования настроек существующего канала
-    if data.get("channel_id") and current_state != AddChannelState.waiting_prompt_style:
+    if data.get("channel_id") and current_state != AddChannelState.waiting_prompt_style.state:
         channel_id = data["channel_id"]
         pool = await get_pool()
         async with pool.acquire() as conn:
@@ -405,7 +405,7 @@ async def got_timezone(callback: CallbackQuery, state: FSMContext):
         return
 
     # Режим редактирования
-    if current_state == EditSettingsState.waiting_timezone:
+    if current_state == EditSettingsState.waiting_timezone.state:
         channel_id = data["channel_id"]
         pool = await get_pool()
         async with pool.acquire() as conn:
