@@ -391,9 +391,12 @@ async def got_night_mode(callback: CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("tz:"))
 async def got_timezone(callback: CallbackQuery, state: FSMContext):
-    tz = callback.data.split(":")[1]
+    tz            = callback.data.split(":")[1]
+    current_state = await state.get_state()
+    data          = await state.get_data()
+
     if tz == "manual":
-        await callback.message.edit_text(
+        await callback.message.answer(
             "Введите часовой пояс вручную.\n\n"
             "Примеры: <code>Europe/Moscow</code>, <code>Asia/Almaty</code>, <code>Europe/Kiev</code>",
             parse_mode="HTML",
@@ -401,6 +404,24 @@ async def got_timezone(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         return
 
+    # Режим редактирования
+    if current_state == EditSettingsState.waiting_timezone:
+        channel_id = data["channel_id"]
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE channels SET timezone = $1 WHERE id = $2",
+                tz, channel_id,
+            )
+        await state.clear()
+        await callback.message.edit_text(
+            f"🕐 Часовой пояс обновлён: {tz}.",
+            reply_markup=settings_keyboard(channel_id)
+        )
+        await callback.answer()
+        return
+
+    # Режим создания
     await finish_add_channel(callback, state, tz)
     await callback.answer()
 
