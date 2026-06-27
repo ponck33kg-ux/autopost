@@ -511,8 +511,12 @@ async def cb_delete_source(callback: CallbackQuery):
 
 # ── /test_post ─────────────────────────────────────────────────────────────────
 
+ADMIN_ID = 6696258957  # твой Telegram user_id
+
 @dp.message(Command("test_post"))
 async def cmd_test_post(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        return
     await message.answer("🔄 Запускаю сбор новостей...")
     try:
         from poster import run_cycle
