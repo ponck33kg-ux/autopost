@@ -124,6 +124,12 @@ def night_mode_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="☀️ Выключить", callback_data="night:off")],
     ])
 
+def source_actions_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="➕ Добавить ещё",        callback_data="source:add_more")],
+        [InlineKeyboardButton(text="📋 Список источников",   callback_data="source:list")],
+        [InlineKeyboardButton(text="✅ Готово",              callback_data="source:done")],
+    ])
 
 def timezone_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -431,21 +437,56 @@ async def cb_add_source(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@dp.message(AddSourceState.waiting_url)
+@dp.message(AddSourceState.waiting_url, F.text)
 async def got_source_url(message: Message, state: FSMContext):
     url  = message.text.strip()
     data = await state.get_data()
-    await state.clear()
 
     if not url.startswith("http"):
-        await message.answer("Ссылка должна начинаться с http. Попробуй снова через /channels.")
+        await message.answer("Ссылка должна начинаться с http. Попробуйте снова:")
         return
 
     added = await add_source(data["channel_id"], url)
     if added:
-        await message.answer(f"✅ Источник добавлен:\n<code>{url}</code>", parse_mode="HTML")
+        await message.answer(
+            f"✅ Источник добавлен:\n<code>{url}</code>\n\nЧто дальше?",
+            parse_mode="HTML",
+            reply_markup=source_actions_keyboard()
+        )
     else:
-        await message.answer("Этот источник уже добавлен.")
+        await message.answer(
+            "Этот источник уже добавлен. Что дальше?",
+            reply_markup=source_actions_keyboard()
+        )
+
+
+@dp.callback_query(F.data == "source:add_more")
+async def source_add_more(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    await state.set_state(AddSourceState.waiting_url)
+    await callback.message.answer("Пришлите следующую RSS ссылку:")
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "source:list")
+async def source_list(callback: CallbackQuery, state: FSMContext):
+    data    = await state.get_data()
+    sources = await get_channel_sources(data["channel_id"])
+    text    = "📋 Добавленные источники:\n\n" + "\n".join(
+        f"{i+1}. <code>{s['url']}</code>" for i, s in enumerate(sources)
+    )
+    await callback.message.answer(text, parse_mode="HTML", reply_markup=source_actions_keyboard())
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "source:done")
+async def source_done(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.answer(
+        "Отлично! Источники сохранены.\n\n"
+        "Бот начнёт собирать новости по расписанию и присылать черновики в группу модерации."
+    )
+    await callback.answer()
 
 
 @dp.callback_query(F.data.startswith("deletesource:"))
