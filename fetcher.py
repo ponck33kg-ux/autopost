@@ -57,12 +57,15 @@ async def fetch_for_channel(channel: dict) -> List[Article]:
         print(f"[fetcher] Канал {chat_id}: нет источников")
         return []
 
+    per_source_limit = max(1, max_posts // len(sources))
     candidates: List[Article] = []
-
     for source in sources:
         url          = source["url"]
         raw_articles = await asyncio.to_thread(parse_feed, url)
+        source_count = 0
         for a in raw_articles:
+            if source_count >= per_source_limit:
+                break
             if not a["url"]:
                 continue
             if await is_url_seen(a["url"], channel_id):
@@ -78,7 +81,7 @@ async def fetch_for_channel(channel: dict) -> List[Article]:
                 url=a["url"],
                 source=a["source"],
             ))
-
+            source_count += 1
     result = candidates[:max_posts]
     for article in result:
         await mark_url_seen(article.url, channel_id)
