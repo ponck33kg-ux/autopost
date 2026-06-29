@@ -366,7 +366,26 @@ async def got_prompt_style(callback: CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("interval:"))
 async def got_interval(callback: CallbackQuery, state: FSMContext):
-    interval = int(callback.data.split(":")[1])
+    interval      = int(callback.data.split(":")[1])
+    current_state = await state.get_state()
+    data          = await state.get_data()
+
+    if current_state == EditSettingsState.waiting_interval.state:
+        channel_id = data["channel_id"]
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE channels SET interval = $1 WHERE id = $2",
+                interval, channel_id,
+            )
+        await state.clear()
+        await callback.message.edit_text(
+            f"⏱ Частота обновлена: каждые {interval} ч.",
+            reply_markup=settings_keyboard(channel_id)
+        )
+        await callback.answer()
+        return
+
     await state.update_data(interval=interval)
     await state.set_state(AddChannelState.waiting_night_mode)
     await callback.message.edit_text(
@@ -375,7 +394,6 @@ async def got_interval(callback: CallbackQuery, state: FSMContext):
         reply_markup=night_mode_keyboard()
     )
     await callback.answer()
-
 
 @dp.callback_query(F.data.startswith("night:"))
 
@@ -464,53 +482,6 @@ async def finish_add_channel(event, state: FSMContext, timezone: str):
         await event.answer(text, parse_mode="HTML")
         
         # ── Сохранение настроек ────────────────────────────────────────────────────────
-
-@dp.callback_query(EditSettingsState.waiting_interval, F.data.startswith("interval:"))
-async def save_interval(callback: CallbackQuery, state: FSMContext):
-    interval   = int(callback.data.split(":")[1])
-    data       = await state.get_data()
-    channel_id = data["channel_id"]
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        await conn.execute(
-            "UPDATE channels SET interval = $1 WHERE id = $2",
-            interval, channel_id,
-        )
-    await state.clear()
-    await callback.message.edit_text(
-        f"⏱ Частота обновлена: каждые {interval} ч.",
-        reply_markup=settings_keyboard(channel_id)
-    )
-    await callback.answer()
-
-
-@dp.callback_query(EditSettingsState.waiting_timezone, F.data.startswith("tz:"))
-async def save_timezone(callback: CallbackQuery, state: FSMContext):
-    tz         = callback.data.split(":")[1]
-    data       = await state.get_data()
-    channel_id = data["channel_id"]
-    if tz == "manual":
-        await callback.message.answer(
-            "Введите часовой пояс вручную.\n\n"
-            "Например: <code>Europe/Moscow</code>",
-            parse_mode="HTML",
-        )
-        await callback.answer()
-        return
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        await conn.execute(
-            "UPDATE channels SET timezone = $1 WHERE id = $2",
-            tz, channel_id,
-        )
-    await state.clear()
-    await callback.message.edit_text(
-        f"🕐 Часовой пояс обновлён: {tz}.",
-        reply_markup=settings_keyboard(channel_id)
-    )
-    await callback.answer()
-
-
 @dp.message(EditSettingsState.waiting_timezone, F.text)
 async def save_timezone_manual(message: Message, state: FSMContext):
     data       = await state.get_data()
