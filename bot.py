@@ -90,11 +90,17 @@ def channels_keyboard(channels: list) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def channel_keyboard(channel_id: int) -> InlineKeyboardMarkup:
+def channel_keyboard(channel_id: int, is_active: bool = True) -> InlineKeyboardMarkup:
+    pause_btn = (
+        InlineKeyboardButton(text="⏸ Поставить на паузу", callback_data=f"pause:{channel_id}")
+        if is_active else
+        InlineKeyboardButton(text="▶️ Возобновить",        callback_data=f"resume:{channel_id}")
+    )
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📋 Источники",        callback_data=f"sources:{channel_id}")],
         [InlineKeyboardButton(text="➕ Добавить источник", callback_data=f"addsource:{channel_id}")],
         [InlineKeyboardButton(text="⚙️ Настройки",        callback_data=f"settings:{channel_id}")],
+        [pause_btn],
         [InlineKeyboardButton(text="🗑 Удалить канал",    callback_data=f"deletechannel:{channel_id}")],
         [InlineKeyboardButton(text="◀️ Назад",            callback_data="back_channels")],
     ])
@@ -234,15 +240,48 @@ async def show_channel(callback: CallbackQuery):
     if not channel:
         await callback.answer("Канал не найден.", show_alert=True)
         return
-    sources = await get_channel_sources(channel_id)
+    sources   = await get_channel_sources(channel_id)
+    is_active = channel.get("is_active", True)
+    status    = "✅ активен" if is_active else "⏸ на паузе"
     await callback.message.edit_text(
         f"📢 <b>{channel['name']}</b>\n"
         f"ID: <code>{channel['chat_id']}</code>\n"
         f"Топик: <code>{channel['topic_id']}</code>\n"
         f"Стиль: {channel['prompt_style']}\n"
-        f"Источников: {len(sources)}",
+        f"Источников: {len(sources)}\n"
+        f"Статус: {status}",
         parse_mode="HTML",
-        reply_markup=channel_keyboard(channel_id)
+        reply_markup=channel_keyboard(channel_id, is_active)
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("pause:"))
+async def cb_pause_channel(callback: CallbackQuery):
+    channel_id = int(callback.data.split(":")[1])
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE channels SET is_active = FALSE WHERE id = $1", channel_id
+        )
+    await callback.message.edit_text(
+        "⏸ Канал поставлен на паузу.\n\nЧерновики собираться не будут, пока не возобновишь.",
+        reply_markup=channel_keyboard(channel_id, is_active=False)
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("resume:"))
+async def cb_resume_channel(callback: CallbackQuery):
+    channel_id = int(callback.data.split(":")[1])
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE channels SET is_active = TRUE WHERE id = $1", channel_id
+        )
+    await callback.message.edit_text(
+        "▶️ Канал возобновлён.\n\nЧерновики снова будут приходить по расписанию.",
+        reply_markup=channel_keyboard(channel_id, is_active=True)
     )
     await callback.answer()
 

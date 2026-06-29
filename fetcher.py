@@ -46,6 +46,9 @@ def keyword_match(text: str, keywords: List[str]) -> bool:
 
 
 async def fetch_for_channel(channel: dict) -> List[Article]:
+    if not channel.get("is_active", True):
+        print(f"[fetcher] {channel['chat_id']}: на паузе, пропускаем")
+        return []
     channel_id   = channel["id"]
     chat_id      = channel["chat_id"]
     topic_id     = channel["topic_id"]
