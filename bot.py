@@ -738,11 +738,11 @@ async def cb_delete_source(callback: CallbackQuery):
 
 # ── /test_post ─────────────────────────────────────────────────────────────────
 
-ADMIN_ID = 6696258957  # твой Telegram user_id
+ADMIN_IDS = [6696258957, 7993539145]  # твой Telegram user_id + доступ для коллеги
 
 @dp.message(Command("test_post"))
 async def cmd_test_post(message: Message):
-    if message.from_user.id != ADMIN_ID:
+    if message.from_user.id not in ADMIN_IDS:
         return
     await message.answer("🔄 Запускаю сбор новостей...")
     try:
