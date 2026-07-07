@@ -190,7 +190,8 @@ def confirm_keyboard(draft_id: int) -> InlineKeyboardMarkup:
 # ── /start ─────────────────────────────────────────────────────────────────────
 
 @dp.message(Command("start"))
-async def cmd_start(message: Message):
+async def cmd_start(message: Message, state: FSMContext):
+    await state.clear()
     await get_or_create_user(message.from_user.id)
     await message.answer(
         "👋 Привет! Я <b>Autopost Bot</b> — собираю новости из RSS и публикую в ваши каналы после одобрения.\n\n"
@@ -206,7 +207,8 @@ async def cmd_start(message: Message):
 # ── /channels ──────────────────────────────────────────────────────────────────
 
 @dp.message(Command("channels"))
-async def cmd_channels(message: Message):
+async def cmd_channels(message: Message, state: FSMContext):
+    await state.clear()
     await get_or_create_user(message.from_user.id)
     channels = await get_user_channels(message.from_user.id)
     if not channels:
@@ -740,10 +742,18 @@ async def cb_delete_source(callback: CallbackQuery):
 
 ADMIN_IDS = [6696258957, 7993539145]  # твой Telegram user_id + доступ для коллеги
 
+@dp.message(Command("cancel"))
+async def cmd_cancel(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer("Отменено. Можешь продолжать — например, /channels.")
+
+
 @dp.message(Command("test_post"))
-async def cmd_test_post(message: Message):
+async def cmd_test_post(message: Message, state: FSMContext):
+    await state.clear()
     if message.from_user.id not in ADMIN_IDS:
         return
+    
     await message.answer("🔄 Запускаю сбор новостей...")
     try:
         from poster import run_cycle
