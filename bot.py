@@ -660,25 +660,41 @@ async def cb_add_source(callback: CallbackQuery, state: FSMContext):
 
 @dp.message(AddSourceState.waiting_url, F.text)
 async def got_source_url(message: Message, state: FSMContext):
-    url  = message.text.strip()
     data = await state.get_data()
+    urls = [line.strip() for line in message.text.splitlines() if line.strip()]
 
-    if not url.startswith("http"):
-        await message.answer("Ссылка должна начинаться с http. Попробуйте снова:")
+    if not urls:
+        await message.answer("Пришли хотя бы одну ссылку, начинающуюся с http.")
         return
 
-    added = await add_source(data["channel_id"], url)
-    if added:
-        await message.answer(
-            f"✅ Источник добавлен:\n<code>{url}</code>\n\nЧто дальше?",
-            parse_mode="HTML",
-            reply_markup=source_actions_keyboard()
-        )
-    else:
-        await message.answer(
-            "Этот источник уже добавлен. Что дальше?",
-            reply_markup=source_actions_keyboard()
-        )
+    added_count   = 0
+    skipped_count = 0
+    invalid       = []
+
+    for url in urls:
+        if not url.startswith("http"):
+            invalid.append(url)
+            continue
+        added = await add_source(data["channel_id"], url)
+        if added:
+            added_count += 1
+        else:
+            skipped_count += 1
+
+    lines = []
+    if added_count:
+        lines.append(f"✅ Добавлено источников: {added_count}")
+    if skipped_count:
+        lines.append(f"⏭ Уже были добавлены: {skipped_count}")
+    if invalid:
+        lines.append(f"⚠️ Пропущено (не начинаются с http): {len(invalid)}")
+        lines.append("\n".join(f"<code>{u}</code>" for u in invalid))
+
+    await message.answer(
+        "\n".join(lines) + "\n\nЧто дальше?",
+        parse_mode="HTML",
+        reply_markup=source_actions_keyboard()
+    )
 
 
 @dp.callback_query(F.data == "source:add_more")
