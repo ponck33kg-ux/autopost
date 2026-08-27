@@ -123,6 +123,7 @@ def prompt_style_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="📰 Деловой",  callback_data="style:деловой")],
         [InlineKeyboardButton(text="🔥 Кликбейт", callback_data="style:кликбейт")],
         [InlineKeyboardButton(text="🔮 Эзотерический", callback_data="style:эзотерический")],
+        [InlineKeyboardButton(text="🌐 English (кибербез)", callback_data="style:english")],
     ])
     
 def interval_keyboard() -> InlineKeyboardMarkup:
