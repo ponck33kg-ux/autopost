@@ -1,4 +1,5 @@
 import asyncio
+import random
 import feedparser
 from dataclasses import dataclass
 from typing import List
@@ -60,31 +61,46 @@ async def fetch_for_channel(channel: dict) -> List[Article]:
         print(f"[fetcher] Канал {chat_id}: нет источников")
         return []
 
-    per_source_limit = max(1, max_posts // len(sources))
+    random.shuffle(sources)  # каждый проход — разные источники в приоритете
+
+    raw_by_source = await asyncio.gather(*[
+        asyncio.to_thread(parse_feed, s["url"]) for s in sources
+    ])
+
+    # round-robin: по одной новой статье с каждого источника за круг,
+    # пока не наберём max_posts или не кончатся источники
     candidates: List[Article] = []
-    for source in sources:
-        url          = source["url"]
-        raw_articles = await asyncio.to_thread(parse_feed, url)
-        source_count = 0
-        for a in raw_articles:
-            if source_count >= per_source_limit:
+    source_iters = [iter(articles) for articles in raw_by_source]
+    exhausted    = [False] * len(source_iters)
+
+    while len(candidates) < max_posts and not all(exhausted):
+        for i, it in enumerate(source_iters):
+            if exhausted[i]:
+                continue
+            found = False
+            for a in it:
+                if not a["url"]:
+                    continue
+                if await is_url_seen(a["url"], channel_id):
+                    continue
+                candidates.append(Article(
+                    channel_id=channel_id,
+                    channel_chat_id=chat_id,
+                    topic_id=topic_id,
+                    prompt_style=prompt_style,
+                    max_posts=max_posts,
+                    title=a["title"],
+                    summary=a["summary"],
+                    url=a["url"],
+                    source=a["source"],
+                ))
+                found = True
                 break
-            if not a["url"]:
-                continue
-            if await is_url_seen(a["url"], channel_id):
-                continue
-            candidates.append(Article(
-                channel_id=channel_id,
-                channel_chat_id=chat_id,
-                topic_id=topic_id,
-                prompt_style=prompt_style,
-                max_posts=max_posts,
-                title=a["title"],
-                summary=a["summary"],
-                url=a["url"],
-                source=a["source"],
-            ))
-            source_count += 1
+            if not found:
+                exhausted[i] = True
+            if len(candidates) >= max_posts:
+                break
+
     result = candidates[:max_posts]
     for article in result:
         await mark_url_seen(article.url, channel_id)
