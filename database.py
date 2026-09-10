@@ -66,6 +66,9 @@ async def init_db():
                 status                TEXT DEFAULT 'pending',
                 created_at            TIMESTAMPTZ DEFAULT NOW()
             );
+
+            ALTER TABLE channels ADD COLUMN IF NOT EXISTS secondary_prompt_style TEXT DEFAULT NULL;
+            ALTER TABLE drafts ADD COLUMN IF NOT EXISTS draft_type TEXT DEFAULT 'primary';
         """)
 
 # ── users ──────────────────────────────────────────────────────────────────────
@@ -189,15 +192,15 @@ async def mark_url_seen(url: str, channel_id: int):
 
 # ── drafts ─────────────────────────────────────────────────────────────────────
 
-async def save_draft(channel_id: int, title: str, content: str, source_url: str) -> int:
+async def save_draft(channel_id: int, title: str, content: str, source_url: str, draft_type: str = "primary") -> int:
     pool = await get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
-            INSERT INTO drafts (channel_id, title, content, source_url)
-            VALUES ($1, $2, $3, $4) RETURNING id
+            INSERT INTO drafts (channel_id, title, content, source_url, draft_type)
+            VALUES ($1, $2, $3, $4, $5) RETURNING id
             """,
-            channel_id, title, content, source_url,
+            channel_id, title, content, source_url, draft_type,
         )
         return row["id"]
 

@@ -789,6 +789,9 @@ async def handle_approve(callback: CallbackQuery):
     if not draft:
         await callback.answer("Черновик не найден.", show_alert=True)
         return
+    if draft.get("draft_type") == "ilya":
+        await callback.answer("Это комментарий Ильи для LinkedIn — публикация в канал недоступна.", show_alert=True)
+        return
     if draft["status"] in ("published", "rejected"):
         await callback.answer("Уже обработан.", show_alert=True)
         return
@@ -844,9 +847,18 @@ async def handle_new_text(message: Message, state: FSMContext):
     draft_id = data["draft_id"]
     await update_draft_content(draft_id, message.text)
     await state.clear()
+
+    draft = await get_draft_by_id(draft_id)
+    if draft and draft.get("draft_type") == "ilya":
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="❌ Отклонить", callback_data=f"draft:reject:{draft_id}"),
+        ]])
+    else:
+        keyboard = confirm_keyboard(draft_id)
+
     await message.reply(
         f"Новый текст:\n\n{message.text}",
-        reply_markup=confirm_keyboard(draft_id),
+        reply_markup=keyboard,
     )
 
 
