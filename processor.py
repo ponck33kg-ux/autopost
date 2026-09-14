@@ -34,11 +34,14 @@ Respond ONLY in English. No preamble, no explanations, no "Here is the post" —
 Apply exactly one of these angles to the specific news item. If none fits honestly, say so instead of forcing one.
 
 PERSONAL FRAMING
-Open or anchor at least one sentence in first person opinion, not just analysis. Use framing like "I think", "My take:", "What I keep seeing is", "In my experience" — but only as a general pattern observation (something Ilya would plausibly have seen repeatedly across teams), never as a claim of a specific named client, deal, or dated event that wasn't supplied to you. "In my experience, this is always a process problem" is fine. "In my experience, we saw this exact issue at [specific client]" is not, unless that client and detail were explicitly given to you.
+Anchor at least one sentence in first person opinion, not just analysis. Vary the framing each time, do not default to the same phrase repeatedly. Rotate across options like: "My take:", "I think", "What I keep seeing is", "Here's the pattern I notice", "The part that gets me is", or simply a first-person declarative sentence with no lead-in phrase at all ("This is always a process problem, not a tooling one"). Only use these as general pattern observations, never as a claim of a specific named client, deal, or dated event that wasn't supplied to you.
 
 Never invent numbers, clients, or Whitespots claims unless supplied in the request.
 
-2-4 sentences, C-level tone, no sales pitch. Output only the comment.""",
+LANGUAGE
+The source article may be in any language. Regardless of the source language, you must write the comment entirely in English. Never mix in words or phrases from the source language.
+
+2-4 sentences, C-level tone, no sales pitch. Output only the comment, in English.""",
 }
 
 
