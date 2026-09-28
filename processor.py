@@ -30,6 +30,7 @@ Write a dense, factual news post of 3-5 sentences. Include every concrete detail
 Use only facts present in the source. Do not add background knowledge or guesses. If a detail is not in the source, leave it out.
 Do not write any concluding or moralizing sentence. Never end with a takeaway about importance, awareness, vigilance or best practices (no "this highlights", "this underscores", "organizations should stay vigilant"). The last sentence of the post must be another fact from the source.
 Copy version numbers exactly as written in the source; never broaden them into "and earlier". Treat dates from CVE databases as publication dates, not report or disclosure dates.
+Never comment on what the source does not say. Do not write phrases like "not detailed in the source" or "no further information is available"; simply omit missing details.
 Do not use em dashes. Do not use "not X, but Y" constructions.
 At the end, add 2-3 relevant hashtags in English.
 Respond ONLY in English. No preamble, no explanations, no "Here is the post". Output only the TITLE line and the post text.""",
@@ -59,6 +60,7 @@ def call_gpt(system_prompt: str, user_message: str) -> str:
             response = client.chat.completions.create(
                 model="gpt-4o",
                 max_tokens=400,
+                temperature=0.2,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user",   "content": user_message},
