@@ -34,11 +34,12 @@ def format_draft_message(article: Article, content: str, draft_type: str = "prim
             f"🔗 <a href='{article.url}'>{article.title}</a>\n\n"
             f"{content}"
         )
+    source_label = "Source" if article.prompt_style == "english" else "Источник"
     return (
         f"📋 <b>Черновик</b> → <code>{article.channel_chat_id}</code>\n"
         f"🔗 <a href='{article.url}'>{article.title}</a>\n\n"
         f"{content}\n\n"
-        f"<i>Источник: {article.source}</i>"
+        f"<i>{source_label}: {article.source}</i>"
     )
 
 
